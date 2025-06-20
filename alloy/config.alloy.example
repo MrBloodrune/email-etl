@@ -1,0 +1,210 @@
+// Grafana Alloy configuration for Gmail ETL observability
+// This is an example configuration - actual endpoints should be configured
+// based on your Grafana Cloud or self-hosted setup
+
+// OTLP Receiver - receives telemetry from the Gmail ETL API
+otelcol.receiver.otlp "default" {
+  // gRPC endpoint for receiving telemetry data
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  
+  // HTTP endpoint for receiving telemetry data  
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.default.input]
+    logs    = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.batch.default.input]
+  }
+}
+
+// Batch processor for efficient data transmission
+otelcol.processor.batch "default" {
+  timeout = "10s"
+  send_batch_size = 1024
+
+  output {
+    metrics = [otelcol.exporter.otlphttp.metrics.input]
+    logs    = [otelcol.exporter.otlphttp.logs.input]
+    traces  = [otelcol.exporter.otlphttp.traces.input]
+  }
+}
+
+// PostgreSQL metrics exporter
+prometheus.exporter.postgres "gmail_etl" {
+  data_source_names = [
+    "postgresql://" + env("POSTGRES_USER") + ":" + env("POSTGRES_PASSWORD") + 
+    "@" + env("POSTGRES_HOST") + ":5432/" + env("POSTGRES_DB") + "?sslmode=disable",
+  ]
+  
+  // Disable auto-discovery to reduce noise
+  autodiscovery_enabled = false
+  
+  // Include specific databases
+  include_databases = [env("POSTGRES_DB")]
+}
+
+// Node exporter for system metrics
+prometheus.exporter.unix "node" {
+  // Configure which collectors to enable
+  disable_collectors = ["wifi", "thermal_zone"]
+  
+  // Filesystem metrics
+  filesystem_collector {
+    // Monitor root and data volumes
+    mount_points_exclude = "^/(dev|proc|sys|run)($|/)"
+  }
+}
+
+// Process exporter for API metrics
+prometheus.exporter.process "api" {
+  // Track the Python API process
+  matcher {
+    name = "{{.Comm}}"
+    cmdline = ["python.*api_server.py"]
+  }
+}
+
+// Scrape configuration for local exporters
+prometheus.scrape "local_metrics" {
+  targets = concat(
+    prometheus.exporter.postgres.gmail_etl.targets,
+    prometheus.exporter.unix.node.targets,
+    prometheus.exporter.process.api.targets,
+  )
+  
+  forward_to = [prometheus.relabel.metrics.receiver]
+  
+  scrape_interval = "30s"
+}
+
+// Add common labels to all metrics
+prometheus.relabel "metrics" {
+  forward_to = [prometheus.remote_write.default.receiver]
+  
+  rule {
+    target_label = "service"
+    replacement  = "gmail-etl"
+  }
+  
+  rule {
+    target_label = "environment"
+    replacement  = env("ENVIRONMENT")
+  }
+}
+
+// Remote write for Prometheus metrics
+// Configure this based on your backend
+prometheus.remote_write "default" {
+  endpoint {
+    url = env("PROMETHEUS_REMOTE_WRITE_URL")
+    
+    // Optional: Add authentication
+    // basic_auth {
+    //   username = env("PROMETHEUS_USERNAME")
+    //   password = env("PROMETHEUS_PASSWORD")
+    // }
+    
+    // Optional: For Grafana Cloud
+    // bearer_token = env("GRAFANA_CLOUD_TOKEN")
+  }
+  
+  // WAL configuration for reliability
+  wal {
+    truncate_frequency = "1h"
+    max_wal_time = "2h"
+  }
+}
+
+// OTLP exporters for external backends
+// Metrics exporter
+otelcol.exporter.otlphttp "metrics" {
+  client {
+    endpoint = env("OTLP_METRICS_ENDPOINT")
+    
+    // Optional: Add authentication headers
+    // headers = {
+    //   "Authorization" = "Bearer " + env("OTLP_METRICS_TOKEN"),
+    // }
+    
+    compression = "gzip"
+  }
+}
+
+// Logs exporter (can be Loki or any OTLP-compatible backend)
+otelcol.exporter.otlphttp "logs" {
+  client {
+    endpoint = env("OTLP_LOGS_ENDPOINT")
+    
+    // Optional: For Grafana Cloud Logs
+    // headers = {
+    //   "Authorization" = "Bearer " + env("GRAFANA_CLOUD_LOGS_TOKEN"),
+    // }
+    
+    compression = "gzip"
+  }
+}
+
+// Traces exporter (Tempo, Jaeger, etc.)
+otelcol.exporter.otlphttp "traces" {
+  client {
+    endpoint = env("OTLP_TRACES_ENDPOINT")
+    
+    // Optional: Add authentication
+    // headers = {
+    //   "Authorization" = "Bearer " + env("OTLP_TRACES_TOKEN"),
+    // }
+    
+    compression = "gzip"
+  }
+}
+
+// Optional: Export logs to Loki native endpoint
+loki.source.api "otlp" {
+  http {
+    listen_address = "0.0.0.0"
+    listen_port = 3100
+  }
+  
+  forward_to = [loki.write.default.receiver]
+  
+  labels = {
+    service = "gmail-etl",
+    job = "otlp",
+  }
+}
+
+loki.write "default" {
+  endpoint {
+    url = env("LOKI_ENDPOINT")
+    
+    // Optional: Add authentication
+    // basic_auth {
+    //   username = env("LOKI_USERNAME")
+    //   password = env("LOKI_PASSWORD")
+    // }
+    
+    // Optional: For Grafana Cloud
+    // bearer_token = env("GRAFANA_CLOUD_LOGS_TOKEN")
+  }
+}
+
+// Logging configuration for Alloy itself
+logging {
+  level = "info"
+  format = "logfmt"
+}
+
+// Telemetry for monitoring Alloy
+telemetry {
+  metrics {
+    // Expose Alloy's own metrics
+    enabled = true
+    
+    // Include Go runtime metrics
+    include_go_metrics = true
+  }
+}

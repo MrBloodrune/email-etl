@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Environment
+.env
+.env.local
+
+# Gmail OAuth
+credentials.json
+token.json
+
+# Data
+emails/
+*.db
+*.sqlite
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Alloy
+alloy/config.alloy
+alloy/data/
+
+# Logs
+*.log
+
+# Temp
+*.tmp
+*.bak
+.cache/

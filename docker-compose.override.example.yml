@@ -1,0 +1,12 @@
+# Example docker-compose override for running without observability
+# Copy this to docker-compose.override.yml to disable observability
+
+version: '3.8'
+
+services:
+  api:
+    environment:
+      # Disable observability
+      ENABLE_OBSERVABILITY: "false"
+      # Remove OTLP endpoint since we're not using it
+      OTLP_ENDPOINT: ""

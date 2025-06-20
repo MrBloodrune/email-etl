@@ -1,0 +1,192 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: email-etl-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-email_etl}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-email_etl_password}
+      POSTGRES_DB: ${POSTGRES_DB:-gmail_etl}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./scripts/migrate_providers.sql:/docker-entrypoint-initdb.d/02-migrate.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-email_etl}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Database migration runner
+  migration:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: base
+    container_name: email-etl-migration
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./scripts:/app/scripts:ro
+    command: >
+      sh -c "
+        echo 'Waiting for database to be ready...';
+        sleep 5;
+        echo 'Database migrations completed via init scripts';
+      "
+    restart: "no"
+
+  # Email ETL CLI service
+  cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: etl
+    container_name: email-etl-cli
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    volumes:
+      # Persistent data volumes
+      - emails_data:/app/emails
+      - tokens_data:/app/tokens
+      # Bind mounts for credentials
+      - ./credentials.json:/app/credentials.json:ro
+      - ./token.json:/app/token.json:rw
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+    restart: "no"
+
+  # ETL scheduled runner (for automated imports)
+  etl:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: etl
+    container_name: email-etl-worker
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      PYTHONUNBUFFERED: 1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    volumes:
+      - emails_data:/app/emails
+      - tokens_data:/app/tokens
+      - ./credentials.json:/app/credentials.json:ro
+      - ./token.json:/app/token.json:rw
+    command: >
+      sh -c "
+        echo 'ETL Worker started. Run scheduled imports here.';
+        echo 'For now, use the CLI container for manual imports.';
+        sleep infinity
+      "
+    profiles:
+      - scheduled
+    restart: unless-stopped
+
+  # Email ETL API Server
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: email-etl-api
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      OTLP_ENDPOINT: ${OTLP_ENDPOINT:-alloy:4317}
+      ENABLE_OBSERVABILITY: ${ENABLE_OBSERVABILITY:-false}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    volumes:
+      - emails_data:/app/emails:ro
+      - tokens_data:/app/tokens:ro
+    command: python api_server.py
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Grafana Alloy for observability (optional)
+  alloy:
+    image: grafana/alloy:latest
+    container_name: email-etl-alloy
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=${POSTGRES_USER:-email_etl}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-email_etl_password}
+      - POSTGRES_DB=${POSTGRES_DB:-gmail_etl}
+    volumes:
+      - ./alloy:/etc/alloy
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "12345:12345" # Alloy UI
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    depends_on:
+      - postgres
+    profiles:
+      - observability
+    restart: unless-stopped
+
+  # Optional: ClamAV for virus scanning
+  clamav:
+    image: clamav/clamav:latest
+    container_name: email-etl-clamav
+    ports:
+      - "3310:3310"
+    volumes:
+      - clamav_data:/var/lib/clamav
+    profiles:
+      - with-clamav
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  emails_data:
+    driver: local
+  tokens_data:
+    driver: local
+  clamav_data:
+    driver: local
+
+networks:
+  default:
+    name: email-etl-network

@@ -1,0 +1,27 @@
+# FastAPI and server dependencies
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# MCP (Model Context Protocol) integration
+fastmcp==0.1.6
+
+# OpenTelemetry instrumentation
+opentelemetry-api==1.29.0
+opentelemetry-sdk==1.29.0
+opentelemetry-instrumentation==0.50b0
+opentelemetry-instrumentation-fastapi==0.50b0
+opentelemetry-instrumentation-psycopg2==0.50b0
+opentelemetry-instrumentation-requests==0.50b0
+opentelemetry-instrumentation-logging==0.50b0
+opentelemetry-exporter-otlp==1.29.0
+opentelemetry-exporter-prometheus==0.50b0
+
+# Metrics and monitoring
+prometheus-client==0.21.0
+
+# Additional API dependencies
+python-multipart==0.0.18
+httpx==0.28.1
+starlette-exporter==0.23.0

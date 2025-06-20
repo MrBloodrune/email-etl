@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(python test:*)",
+      "Bash(python3 test_provider.py:*)",
+      "Bash(find:*)",
+      "Bash(rm:*)",
+      "Bash(chmod:*)",
+      "Bash(git init:*)"
+    ],
+    "deny": []
+  }
+}

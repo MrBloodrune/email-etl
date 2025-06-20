@@ -1,0 +1,34 @@
+// Minimal Grafana Alloy configuration - no-op mode
+// This configuration receives data but doesn't forward it anywhere
+// Used when you want to run the system without observability backends
+
+// OTLP Receiver - receives telemetry but discards it
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    // Send to null exporter (discards data)
+    metrics = []
+    logs    = []
+    traces  = []
+  }
+}
+
+// Logging configuration
+logging {
+  level = "warn"
+  format = "logfmt"
+}
+
+// Minimal telemetry
+telemetry {
+  metrics {
+    enabled = false
+  }
+}

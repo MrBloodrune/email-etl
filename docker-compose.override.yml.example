@@ -1,0 +1,68 @@
+# Development override for docker-compose.yml
+# Copy this to docker-compose.override.yml for local development
+
+version: '3.8'
+
+services:
+  # Override CLI service for development
+  cli:
+    build:
+      target: development  # Use development stage with extra tools
+    volumes:
+      # Mount source code for hot reloading
+      - ./src:/app/src:ro
+      - ./main.py:/app/main.py:ro
+      - ./scripts:/app/scripts:ro
+      # Mount credentials as read-write for development
+      - ./credentials.json:/app/credentials.json:rw
+      - ./token.json:/app/token.json:rw
+      # Mount .env for easy configuration changes
+      - ./.env:/app/.env:ro
+    environment:
+      - ENVIRONMENT=development
+      - PYTHONDONTWRITEBYTECODE=1
+
+  # Override API service for development
+  api:
+    build:
+      target: development
+    volumes:
+      # Mount source code for hot reloading
+      - ./src:/app/src:ro
+      - ./api_server.py:/app/api_server.py:ro
+      # Enable write access to emails for development
+      - emails_data:/app/emails:rw
+    environment:
+      - ENVIRONMENT=development
+      - PYTHONDONTWRITEBYTECODE=1
+      - RELOAD=true  # Enable auto-reload if supported
+    ports:
+      - "8000:8000"
+      - "8001:8001"  # Additional port for debugging
+
+  # Override postgres for easier access
+  postgres:
+    ports:
+      - "5432:5432"  # Expose PostgreSQL for external tools
+
+  # Enable observability by default in development
+  alloy:
+    profiles: []  # Remove profile to always run
+
+  # Optional: Add pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: email-etl-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+volumes:
+  pgadmin_data:

@@ -1,0 +1,37 @@
+# Gmail API and OAuth
+google-api-python-client==2.149.0
+google-auth==2.35.0
+google-auth-oauthlib==1.2.1
+google-auth-httplib2==0.2.0
+
+# PostgreSQL and pgvector
+psycopg2-binary==2.9.10
+pgvector==0.3.6
+sqlalchemy==2.0.36
+
+# Email processing
+python-dateutil==2.9.0
+beautifulsoup4==4.12.3
+html2text==2024.2.26
+markdownify==0.13.1
+
+# Security and validation
+python-magic==0.4.27
+pyclamd==0.4.0  # Optional: ClamAV integration
+
+# Embeddings and LLM
+openai==1.58.1
+tiktoken==0.8.0
+langchain==0.3.13
+langchain-openai==0.2.11
+
+# Utilities
+python-dotenv==1.0.1
+click==8.1.7
+pyyaml==6.0.2
+tqdm==4.67.1
+
+# Development
+pytest==8.3.4
+black==24.10.0
+mypy==1.13.0
